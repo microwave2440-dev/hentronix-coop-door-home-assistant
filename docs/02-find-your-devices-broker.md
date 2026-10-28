@@ -26,6 +26,14 @@ You need to see the device's traffic as it leaves your network. Easiest options:
 
 First, find the opener's IP (your router's client list, or by its MAC vendor). Then capture.
 
+> **Gotcha — hardware offload hides traffic.** Many gateways (UniFi with its Qualcomm NSS / "ECM"
+> acceleration, and others) hand **established** connections to a hardware fast path that bypasses the
+> CPU, so `tcpdump` on the gateway only sees the **first second or so** of each connection. The device's
+> brief idle check‑ins stay visible, but a long *awake* session — exactly where open/close happen — can
+> be almost entirely invisible. If your command capture comes back empty, **temporarily disable hardware
+> offload / flow acceleration** for the test, or capture from a box **on the same VLAN** as the opener
+> instead of on the gateway.
+
 ## Passive capture (read‑only)
 
 Filter to just the opener's IP so the output stays readable. Replace `<DOOR_IP>` with your device's IP.
@@ -64,6 +72,9 @@ Watch the telemetry topic for a while and note which fields change:
 - a field that tracks **door open vs closed** is your state flag;
 - a **voltage‑like** number that matches the "live voltage" shown in the app is the battery. Read the
   app's "live voltage" / "previous‑night voltage" at the same time to match them up.
+- a **door‑state** field often has more than two values — distinct codes for *closed*, *closing*,
+  *opening* and *open* — so you can show motion, not just the endpoints. Match them by watching the field
+  while the door actually moves. A temperature reading (also ×10, matching the app) is often in there too.
 
 ## Learn the command format — manually, before you switch anything over
 
@@ -72,6 +83,19 @@ over `/app/` — watching them only teaches you the *state* fields. To capture *
 payload capture while **you operate your own door from the real app**: press open, then close, then
 change each setting once, pausing between presses. Each press appears on `/hentronix/app/<id>`; diff it
 against the idle retained message to see which field(s) carry the command.
+
+What you'll typically find (confirm the exact codes on **your** unit):
+
+- a **command field** plus a **value field** carry the action — often one "move" command with the value
+  choosing **open** vs **close** — with separate codes for **wake**, **heartbeat/keep‑alive**, **sleep**
+  and extras like a light/torch.
+- the device reports progress back on `/dev/` via its door‑state field (closing → closed, etc.).
+
+> **Gotcha — a counter/nonce field may be required.** On the unit tested, every command the app sent
+> carried a small, changing integer field (it looked like a counter or signal value). **Commands that
+> omitted it were silently ignored and the door stayed asleep.** Its exact value wasn't checked (any
+> changing number worked), but the field had to be **present**. If replayed commands do nothing,
+> reproduce *every* field the app sends — including ones that look incidental.
 
 Do this **while the vendor cloud is still up** (the app needs it) and **before** you add the redirect in
 [03](03-home-assistant-takeover.md) — once traffic is redirected, the app can no longer reach the door.

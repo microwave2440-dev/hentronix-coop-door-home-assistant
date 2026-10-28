@@ -27,9 +27,15 @@ Using what you captured:
 
 - **Sensors** from `/hentronix/dev/<DEVICE_ID>` (parse the JSON): battery voltage, door state, uptime,
   signal, etc.
-- **A `cover`** (and/or buttons/numbers for settings) that **publishes the captured command JSON,
-  retained**, to `/hentronix/app/<DEVICE_ID>`. Use only values you've seen the real app send — never
-  guesses.
+- **A `cover`** (and/or buttons/numbers for settings) that **publishes the captured command JSON** to
+  `/hentronix/app/<DEVICE_ID>`. Use only values you've seen the real app send — never guesses.
+- **Handle the wake/sleep session** (see the session model in [01](01-how-it-works.md)). The device only
+  acts while awake, so a robust `cover` should: publish **wake** (retained) → wait for the device to
+  report an open session (or its settings/status to arrive) → send the **move** command → watch the
+  door‑state field reach the target → publish **sleep** (retained). Send a **heartbeat** on a short timer
+  while you intend to stay connected. **Always finish by leaving a sleep/idle command as the retained
+  value, with a timeout fallback** — if a wake command is left retained, the door never sleeps and the
+  battery drains.
 
 You can build and test all of this against the local broker before pointing the door at it.
 

@@ -24,6 +24,9 @@ working for good — privately, with no dependence on a defunct company's server
 - Because it's plaintext to a fixed address, you can **redirect it to your own MQTT broker at home**
   with a single **destination‑NAT (DNAT) rule on your router**. The opener keeps its firmware, login and
   topics — it just lands on your broker. Home Assistant then becomes the brain.
+- The device is a **sleepy subscriber**: the app *wakes* it, keeps it awake with a heartbeat, then
+  *sleeps* it. A local takeover has to copy that — and must always leave a **sleep** command as the
+  retained value, or the door never sleeps and the battery drains.
 
 ## What's here
 
@@ -55,8 +58,10 @@ device ID. You obtain those for your own unit by capturing your own traffic
 
 ## Status
 
-Written up from one working investigation of a single Hentronix WiFi unit (Oct 2026). Field values
-(exact JSON fields, firmware variations) may differ between units — treat the specifics as a template to
-confirm against your own capture, and PRs with other units' findings are welcome.
+**End‑to‑end tested on one Hentronix WiFi unit (Oct 2026):** passive capture → local Mosquitto broker →
+router DNAT redirect → **wake, live status (door position, battery, light, temperature) and open/close
+confirmed moving the physical door**, then back to sleep — with the vendor cloud bypassed. Exact JSON
+fields and command codes may differ between units and firmware, so treat the specifics as a **template to
+confirm against your own capture**. PRs with other units' findings are welcome.
 
 *Not affiliated with Hentronix. "Hentronix" is used only to identify the hardware this concerns.*

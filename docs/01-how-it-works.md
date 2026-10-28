@@ -32,6 +32,11 @@ On the unit investigated, that connection was:
 - Short‑lived sessions roughly every ~16 seconds: connect → subscribe to its command topic → publish a
   status message → sleep → reconnect.
 
+> **A second, encrypted channel exists.** Alongside MQTT, the unit also makes occasional **HTTPS** calls
+> to a vendor cloud API (an AWS API Gateway host). It's encrypted, so its purpose is unverified — likely
+> push notifications or a "who wants me?" poll. In testing, local MQTT control worked **without** any
+> interaction with it, but if your unit won't wake after the switchover, this is the thing to look at.
+
 ### Topics and messages
 
 Two topics, both keyed by the device's own ID (its MAC, as hex):
@@ -45,6 +50,24 @@ Payloads are small **JSON** objects of short keys (e.g. a device‑ID field, a m
 uptime counter, and several state/command/setting fields). The exact keys are easy to read off your own
 capture — and because the device is a sleepy subscriber, **commands are published `retained`** so the
 broker hands the latest one over the instant the device next connects.
+
+### Sleep, wake, and the app "session"
+
+The ~16 s check‑ins are the device's **idle** behaviour — it just collects whatever command is waiting,
+reports status, and drops the connection. Opening the unit in the app starts a **session**, and a local
+takeover has to copy all three parts of it:
+
+1. **Wake** — the app sends a "start session" command. The device then **holds one connection open**
+   (an on‑board LED comes on) instead of dropping it every 16 s.
+2. **Heartbeat** — while you're on the device's screen the app re‑sends a keep‑alive command every few
+   seconds, and the device answers each with status. This is what keeps it awake.
+3. **Sleep** — leaving the screen sends an "end session" command and the device returns to the idle 16 s
+   pattern.
+
+**This matters for battery life.** Because commands are **retained**, if your broker is left holding a
+*wake* command the device re‑wakes on every check‑in and never sleeps — draining the battery. Home
+Assistant must always leave a **sleep/idle** command as the retained value when it isn't actively
+controlling the door (see [03](03-home-assistant-takeover.md)).
 
 > Your unit's **broker IP, MQTT username/password and device ID are specific to you** and are captured
 > from your own device — see [02](02-find-your-devices-broker.md). They are intentionally not published
