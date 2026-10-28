@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hentronix Coop Door — Local Takeover</title>
+<meta name="description" content="Current vs proposed MQTT traffic route for the Hentronix chicken-coop door, with the Home Assistant takeover plan and rationale.">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1a1d21; --muted:#5b6672; --line:#d8dee6;
+    --accent:#2f6df6; --good:#1f9d57; --bad:#d8453b; --warn:#c57a00;
+    --chip:#eef2f8; --device:#e9f0ff; --gw:#eafaf1; --cloud:#fdeceb; --local:#eaf7f0;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1216; --panel:#171b21; --ink:#e7ebf0; --muted:#9aa6b2; --line:#2a313a;
+      --accent:#5c8cff; --good:#3bd07e; --bad:#ff6b60; --warn:#e3a53a;
+      --chip:#1e242c; --device:#17243f; --gw:#13291f; --cloud:#311917; --local:#122a1f;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 22px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1216; --panel:#171b21; --ink:#e7ebf0; --muted:#9aa6b2; --line:#2a313a;
+    --accent:#5c8cff; --good:#3bd07e; --bad:#ff6b60; --warn:#e3a53a;
+    --chip:#1e242c; --device:#17243f; --gw:#13291f; --cloud:#311917; --local:#122a1f;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 22px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:32px 16px 72px}
+  header h1{font-size:clamp(1.5rem,3.5vw,2.1rem);margin:0 0 6px;letter-spacing:-.02em}
+  header p.sub{color:var(--muted);margin:0 0 4px;font-size:.98rem}
+  .meta{color:var(--muted);font-size:.82rem;margin-top:8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+        padding:20px 20px 8px;margin:22px 0}
+  .card>h2{display:flex;align-items:center;gap:10px;margin:.2em 0 .1em;font-size:1.15rem;letter-spacing:-.01em}
+  .tag{font:600 .7rem/1 var(--sans);letter-spacing:.04em;text-transform:uppercase;padding:5px 9px;border-radius:999px}
+  .tag.now{background:var(--cloud);color:var(--bad);border:1px solid color-mix(in srgb,var(--bad) 35%,transparent)}
+  .tag.new{background:var(--local);color:var(--good);border:1px solid color-mix(in srgb,var(--good) 35%,transparent)}
+  figure{margin:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .diagram{width:100%;min-width:760px;height:auto;display:block;margin:6px 0 2px}
+  figcaption{position:sticky;left:0;max-width:100%}
+  .node-label{font:600 13px var(--sans)}
+  .node-sub{font:11px var(--mono)}
+  .flow-label{font:600 11px var(--mono)}
+  figcaption{color:var(--muted);font-size:.86rem;margin:2px 2px 14px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:6px 2px 16px;font-size:.82rem;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .swatch{width:22px;height:0;border-top-width:3px;border-top-style:solid;display:inline-block}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  .facts dt{font:600 .9rem var(--sans);margin-top:10px}
+  .facts dd{margin:0 0 2px;color:var(--muted);font-size:.9rem}
+  code,kbd{font-family:var(--mono);background:var(--chip);padding:.1em .4em;border-radius:5px;font-size:.86em}
+  ol.steps{counter-reset:s;list-style:none;padding:0;margin:8px 0 14px}
+  ol.steps>li{position:relative;padding:12px 12px 12px 48px;border:1px solid var(--line);border-radius:10px;
+              margin:8px 0;background:var(--panel)}
+  ol.steps>li::before{counter-increment:s;content:counter(s);position:absolute;left:12px;top:12px;
+       width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font:700 13px var(--sans);
+       display:grid;place-items:center}
+  ol.steps>li b{display:block;margin-bottom:2px}
+  ol.steps>li small{color:var(--muted)}
+  ul.why{margin:6px 0 10px;padding-left:0;list-style:none}
+  ul.why>li{position:relative;padding:8px 0 8px 28px;border-bottom:1px solid var(--line)}
+  ul.why>li:last-child{border-bottom:0}
+  ul.why>li::before{content:"";position:absolute;left:6px;top:14px;width:9px;height:9px;border-radius:50%;
+       background:var(--warn)}
+  .callout{border-left:3px solid var(--accent);background:var(--chip);border-radius:0 10px 10px 0;
+       padding:12px 14px;margin:14px 0;font-size:.92rem}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.good{border-left-color:var(--good)}
+  .kv{font-family:var(--mono);font-size:.84rem}
+  .pill{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:999px;
+       padding:3px 10px;font:600 .78rem var(--mono);margin:3px 4px 0 0}
+  .foot{color:var(--muted);font-size:.8rem;text-align:center;margin-top:28px}
+  @media (max-width:720px){header{padding-right:88px}}
+  .toggle{position:absolute;top:12px;right:12px;background:var(--panel);border:1px solid var(--line);
+       color:var(--ink);border-radius:8px;padding:6px 10px;font:600 .8rem var(--sans);cursor:pointer;box-shadow:var(--shadow)}
+  /* plain-English panel */
+  .plain{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 8%,var(--panel)),var(--panel));
+       border:1px solid var(--line)}
+  .plain h2::before{content:"💬 "}
+  .plain p{font-size:1.02rem;margin:.4em 0}
+  .plain .lead{font-weight:600}
+  /* scenarios */
+  .scenarios{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:10px 0 6px}
+  @media (max-width:720px){.scenarios{grid-template-columns:1fr}}
+  .scn{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel)}
+  .scn h3{margin:.1em 0 .5em;font-size:1rem;display:flex;align-items:center;gap:8px}
+  .scn .em{font-size:1.4rem}
+  .scn ul{margin:0;padding-left:18px;font-size:.88rem;color:var(--muted)}
+  .scn li{margin:4px 0}
+  .scn.today{border-top:4px solid var(--good)}
+  .scn.dies{border-top:4px solid var(--bad)}
+  .scn.fixed{border-top:4px solid var(--accent)}
+  .ok{color:var(--good);font-weight:600}
+  .no{color:var(--bad);font-weight:600}
+  /* timeline */
+  .timeline{position:relative;margin:10px 0 4px;padding-left:34px}
+  .timeline::before{content:"";position:absolute;left:11px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .tl{position:relative;padding:4px 0 16px}
+  .tl::before{content:"";position:absolute;left:-28px;top:4px;width:16px;height:16px;border-radius:50%;
+       background:var(--panel);border:3px solid var(--accent)}
+  .tl.found::before{border-color:var(--good);background:var(--good)}
+  .tl b{display:block;font-size:.97rem}
+  .tl span{color:var(--muted);font-size:.88rem}
+  .tl .find{color:var(--good);font-weight:600}
+</style>
+</head>
+<body>
+<button class="toggle" id="themeBtn" title="Toggle light/dark">◐ theme</button>
+<div class="wrap">
+  <header>
+    <h1>Hentronix coop door — traffic route &amp; takeover plan</h1>
+    <p class="sub">Keeping the automatic chicken‑coop door working under Home Assistant after Hentronix (UK) ceased trading — with no hardware change.</p>
+    <p class="sub">Based on a passive capture of one unit. Values shown as placeholders like <code>&lt;BROKER_IP&gt;</code> are the ones you read off your own device — see the project docs.</p>
+    <div class="meta">door <code>&lt;DOOR_IP&gt;</code> · broker <code>&lt;BROKER_IP&gt;:1883</code> · topics <code>/hentronix/dev|app/&lt;DEVICE_ID&gt;</code></div>
+  </header>
+
+  <!-- SHORT VERSION (plain English) -->
+  <section class="card plain">
+    <h2>The short version</h2>
+    <p class="lead">The door hardware is fine and keeps running its schedule regardless. What's at risk is the "smart" layer — and that's what this future‑proofs.</p>
+    <p>The door is a little WiFi gadget that "phones home" over the internet to a <b>message server (an MQTT broker)</b> on a cloud host. The phone app works through that same broker: the app says "open", the broker passes it to the door; the door reports its battery, the broker passes it to the app. With <b>Hentronix shut down nobody is clearly answerable for that server</b>, and it could go dark at any time. If it does, dawn and dusk carry on regardless, because they run on the door's own built‑in clock (RTC) and battery. But the <b>app, remote control, schedule changes and battery readings all stop</b>.</p>
+    <p>The good news: the door talks to the broker in <b>plain, unencrypted messages</b>, aimed at a <b>fixed internet address</b> baked into its firmware. That lets you add <b>one rule on your router</b> that intercepts those messages and <b>redirects them to your own broker at home</b> — a small always‑on server running <b>Home Assistant</b>. The door can't tell the difference; it uses the same login and the same messages. From then on the coop is driven <b>entirely from the house — no cloud, no vendor, no internet dependency</b> — and you get your own app for control and monitoring.</p>
+    <p style="color:var(--muted);font-size:.92rem">The two diagrams below show that redirect — "before" and "after". Further down is how it was worked out, and the step‑by‑step plan.</p>
+  </section>
+
+  <!-- CURRENT -->
+  <section class="card">
+    <h2><span class="tag now">Current</span> How traffic flows today</h2>
+    <figure>
+      <svg class="diagram" viewBox="0 0 960 300" role="img" aria-label="Current route: both the coop door and the phone app connect over the internet to the same AWS MQTT broker, which relays between them">
+        <defs>
+          <marker id="arrNow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L8,3 L0,6 Z" style="fill:var(--bad)"/>
+          </marker>
+        </defs>
+        <!-- DOOR -->
+        <g>
+          <rect x="16" y="44" width="160" height="78" rx="12" style="fill:var(--device);stroke:var(--line)"/>
+          <text x="96" y="74" text-anchor="middle" class="node-label" style="fill:var(--ink)">🐔 Coop door</text>
+          <text x="96" y="92" text-anchor="middle" class="node-sub" style="fill:var(--muted)">ESP · MQTT client</text>
+          <text x="96" y="107" text-anchor="middle" class="node-sub" style="fill:var(--muted)">&lt;DOOR_IP&gt;</text>
+        </g>
+        <!-- GATEWAY -->
+        <g>
+          <rect x="236" y="44" width="160" height="78" rx="12" style="fill:var(--gw);stroke:var(--line)"/>
+          <text x="316" y="74" text-anchor="middle" class="node-label" style="fill:var(--ink)">UniFi UCG Max</text>
+          <text x="316" y="92" text-anchor="middle" class="node-sub" style="fill:var(--muted)">home gateway</text>
+          <text x="316" y="107" text-anchor="middle" class="node-sub" style="fill:var(--muted)">just forwards</text>
+        </g>
+        <!-- INTERNET -->
+        <g>
+          <rect x="456" y="44" width="130" height="78" rx="12" style="fill:var(--chip);stroke:var(--line)"/>
+          <text x="521" y="80" text-anchor="middle" class="node-label" style="fill:var(--ink)">Internet</text>
+          <text x="521" y="98" text-anchor="middle" class="node-sub" style="fill:var(--muted)">home internet</text>
+        </g>
+        <!-- BROKER (hub) -->
+        <g>
+          <rect x="648" y="30" width="296" height="108" rx="12" style="fill:var(--cloud);stroke:color-mix(in srgb,var(--bad) 40%,var(--line))"/>
+          <text x="796" y="58" text-anchor="middle" class="node-label" style="fill:var(--ink)">AWS MQTT broker — the relay hub</text>
+          <text x="796" y="77" text-anchor="middle" class="node-sub" style="fill:var(--muted)">&lt;BROKER_IP&gt;:1883 · plaintext</text>
+          <text x="796" y="93" text-anchor="middle" class="node-sub" style="fill:var(--muted)">relays door ⇄ app messages</text>
+          <text x="796" y="120" text-anchor="middle" class="node-sub" style="fill:var(--bad)">⚠ unowned — could go dark</text>
+        </g>
+        <!-- PHONE -->
+        <g>
+          <rect x="376" y="206" width="232" height="78" rx="12" style="fill:var(--device);stroke:var(--line)"/>
+          <text x="492" y="236" text-anchor="middle" class="node-label" style="fill:var(--ink)">📱 Hentronix app</text>
+          <text x="492" y="254" text-anchor="middle" class="node-sub" style="fill:var(--muted)">home Wi‑Fi or mobile data</text>
+          <text x="492" y="269" text-anchor="middle" class="node-sub" style="fill:var(--muted)">works from anywhere</text>
+        </g>
+        <!-- door path -->
+        <line x1="176" y1="83" x2="230" y2="83" stroke-width="3" marker-end="url(#arrNow)" style="stroke:var(--bad)"/>
+        <line x1="396" y1="83" x2="450" y2="83" stroke-width="3" marker-end="url(#arrNow)" style="stroke:var(--bad)"/>
+        <line x1="586" y1="83" x2="642" y2="83" stroke-width="3" marker-end="url(#arrNow)" style="stroke:var(--bad)"/>
+        <text x="203" y="72" text-anchor="middle" class="flow-label" style="fill:var(--bad)">MQTT :1883</text>
+        <text x="616" y="72" text-anchor="middle" class="flow-label" style="fill:var(--bad)">~16s</text>
+        <!-- phone path to broker -->
+        <path d="M608,232 C 700,228 744,182 772,142" fill="none" stroke-width="3" stroke-dasharray="7 5" marker-end="url(#arrNow)" style="stroke:var(--bad)"/>
+        <text x="716" y="222" text-anchor="middle" class="flow-label" style="fill:var(--bad)">app ⇄ broker (inferred)</text>
+      </svg>
+      <figcaption>The door connects out to the broker (captured), and the phone app works through the same broker, from home or over mobile data. The app's path is dashed because we inferred it from the door's traffic rather than capturing it. The broker relays open/close one way and battery/status the other. It's a single cloud server with nobody clearly answerable for it now; if it stops, the app, remote control, schedule changes and monitoring all stop.</figcaption>
+    </figure>
+  </section>
+
+  <!-- PROPOSED -->
+  <section class="card">
+    <h2><span class="tag new">Proposed</span> Redirect the broker IP to a local broker</h2>
+    <figure>
+      <svg class="diagram" viewBox="0 0 960 320" role="img" aria-label="Proposed route: the door is DNAT-redirected at the gateway to a local Home Assistant broker; a Home Assistant phone app controls it locally; the old AWS broker and Hentronix app are retired">
+        <defs>
+          <marker id="arrNew" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L8,3 L0,6 Z" style="fill:var(--good)"/>
+          </marker>
+        </defs>
+        <!-- DOOR -->
+        <g>
+          <rect x="16" y="72" width="156" height="80" rx="12" style="fill:var(--device);stroke:var(--line)"/>
+          <text x="94" y="102" text-anchor="middle" class="node-label" style="fill:var(--ink)">🐔 Coop door</text>
+          <text x="94" y="120" text-anchor="middle" class="node-sub" style="fill:var(--muted)">unchanged firmware</text>
+          <text x="94" y="135" text-anchor="middle" class="node-sub" style="fill:var(--muted)">&lt;DOOR_IP&gt;</text>
+        </g>
+        <!-- GATEWAY DNAT -->
+        <g>
+          <rect x="232" y="64" width="186" height="96" rx="12" stroke-width="2" style="fill:var(--gw);stroke:var(--accent)"/>
+          <text x="325" y="90" text-anchor="middle" class="node-label" style="fill:var(--ink)">UniFi UCG Max</text>
+          <text x="325" y="108" text-anchor="middle" class="node-sub" style="fill:var(--accent)">DNAT redirect rule</text>
+          <text x="325" y="123" text-anchor="middle" class="node-sub" style="fill:var(--muted)">dst &lt;BROKER_IP&gt;:1883</text>
+          <text x="325" y="138" text-anchor="middle" class="node-sub" style="fill:var(--muted)">→ &lt;HA_IP&gt;:1883</text>
+        </g>
+        <!-- NEW SERVER (hub) -->
+        <g>
+          <rect x="478" y="54" width="212" height="118" rx="12" style="fill:var(--local);stroke:color-mix(in srgb,var(--good) 45%,var(--line))"/>
+          <text x="584" y="84" text-anchor="middle" class="node-label" style="fill:var(--ink)">New home server</text>
+          <text x="584" y="104" text-anchor="middle" class="node-sub" style="fill:var(--muted)">Home Assistant + Mosquitto</text>
+          <text x="584" y="119" text-anchor="middle" class="node-sub" style="fill:var(--muted)">our local MQTT broker</text>
+          <text x="584" y="136" text-anchor="middle" class="node-sub" style="fill:var(--good)">local · no cloud needed</text>
+          <text x="584" y="153" text-anchor="middle" class="node-sub" style="fill:var(--muted)">accepts the door's login</text>
+        </g>
+        <!-- PHONE (new control) -->
+        <g>
+          <rect x="478" y="214" width="212" height="82" rx="12" stroke-width="2" style="fill:var(--device);stroke:var(--accent)"/>
+          <text x="584" y="244" text-anchor="middle" class="node-label" style="fill:var(--ink)">📱 Home Assistant app</text>
+          <text x="584" y="262" text-anchor="middle" class="node-sub" style="fill:var(--muted)">our control &amp; monitoring</text>
+          <text x="584" y="277" text-anchor="middle" class="node-sub" style="fill:var(--muted)">home Wi‑Fi or via VPN</text>
+        </g>
+        <!-- RETIRED: AWS broker -->
+        <g opacity="0.45">
+          <rect x="760" y="66" width="184" height="86" rx="12" stroke-dasharray="5 4" style="fill:var(--panel);stroke:var(--line)"/>
+          <text x="852" y="98" text-anchor="middle" class="node-label" style="fill:var(--muted)">AWS broker</text>
+          <text x="852" y="116" text-anchor="middle" class="node-sub" style="fill:var(--muted)">&lt;BROKER_IP&gt;</text>
+          <text x="852" y="134" text-anchor="middle" class="node-sub" style="fill:var(--muted)">bypassed</text>
+        </g>
+        <!-- RETIRED: old app -->
+        <g opacity="0.45">
+          <rect x="760" y="214" width="184" height="82" rx="12" stroke-dasharray="5 4" style="fill:var(--panel);stroke:var(--line)"/>
+          <text x="852" y="246" text-anchor="middle" class="node-label" style="fill:var(--muted)">📱 Hentronix app</text>
+          <text x="852" y="264" text-anchor="middle" class="node-sub" style="fill:var(--muted)">retired</text>
+          <text x="852" y="279" text-anchor="middle" class="node-sub" style="fill:var(--muted)">(points at dead broker)</text>
+        </g>
+        <!-- live flows (green) -->
+        <line x1="172" y1="112" x2="226" y2="112" stroke-width="3" marker-end="url(#arrNew)" style="stroke:var(--good)"/>
+        <line x1="418" y1="112" x2="472" y2="112" stroke-width="3" marker-end="url(#arrNew)" style="stroke:var(--good)"/>
+        <text x="199" y="100" text-anchor="middle" class="flow-label" style="fill:var(--good)">MQTT</text>
+        <text x="445" y="100" text-anchor="middle" class="flow-label" style="fill:var(--good)">redirected</text>
+        <!-- phone to server (vertical) -->
+        <line x1="584" y1="212" x2="584" y2="176" stroke-width="3" marker-end="url(#arrNew)" style="stroke:var(--good)"/>
+        <text x="650" y="198" text-anchor="middle" class="flow-label" style="fill:var(--good)">control</text>
+        <!-- dead: server -> AWS -->
+        <line x1="692" y1="108" x2="754" y2="108" stroke-width="2" stroke-dasharray="4 4" style="stroke:var(--muted)"/>
+        <line x1="712" y1="98" x2="734" y2="118" stroke-width="3" style="stroke:var(--bad)"/>
+        <line x1="712" y1="118" x2="734" y2="98" stroke-width="3" style="stroke:var(--bad)"/>
+        <text x="723" y="88" text-anchor="middle" class="flow-label" style="fill:var(--bad)">cut</text>
+        <!-- dead: old app -> AWS -->
+        <line x1="852" y1="212" x2="852" y2="156" stroke-width="2" stroke-dasharray="4 4" style="stroke:var(--muted)"/>
+        <line x1="842" y1="174" x2="862" y2="194" stroke-width="3" style="stroke:var(--bad)"/>
+        <line x1="842" y1="194" x2="862" y2="174" stroke-width="3" style="stroke:var(--bad)"/>
+      </svg>
+      <figcaption>One destination‑NAT rule on the gateway catches the door's traffic to the old broker IP and sends it to your local Mosquitto broker on your server — the door keeps its firmware, login and topics, it just lands on your broker. Control moves from the Hentronix app to the <b>Home Assistant app</b> (on home Wi‑Fi, or remotely through a VPN such as Tailscale). The old cloud broker and the vendor app are left bypassed — nothing depends on them.</figcaption>
+    </figure>
+    <div class="legend">
+      <span><i class="swatch" style="border-top-color:var(--bad)"></i> cloud‑dependent (fragile)</span>
+      <span><i class="swatch" style="border-top-color:var(--good)"></i> local (resilient)</span>
+      <span><i class="swatch" style="border-top-color:var(--muted);border-top-style:dashed"></i> bypassed</span>
+    </div>
+  </section>
+
+  <!-- WHY -->
+  <section class="card">
+    <h2>Why change it</h2>
+    <ul class="why">
+      <li><b>The vendor is gone.</b> Hentronix (UK) has ceased trading; the app is maintained by a single developer. If the app is pulled or stops being updated, the WiFi features die.</li>
+      <li><b>Everything hangs on one cloud server.</b> Control, scheduling and battery/status monitoring all route through <span class="kv">&lt;BROKER_IP&gt;</span>, a single broker with no redundancy. Nobody is clearly responsible for it now (possibly the electronics supplier, possibly nobody). If it goes offline, the smart features go with it.</li>
+      <li><b>The door hardware is fine; the cloud layer is what's at risk.</b> Dawn/dusk runs locally on the door's built‑in clock (RTC) and battery, so it doesn't need the cloud. What you'd lose is remote control, schedule changes and monitoring.</li>
+      <li><b>The design makes a clean rescue possible.</b> Plaintext MQTT to a hardcoded IP means we can redirect it locally with no DNS spoofing, no TLS to break, and <b>no change to the hardware or firmware</b>.</li>
+      <li><b>Local ownership.</b> Home Assistant keeps the coop working indefinitely, privately, with no dependence on a defunct company's servers.</li>
+    </ul>
+  </section>
+
+  <!-- SCENARIOS -->
+  <section class="card">
+    <h2>What keeps working in each case</h2>
+    <div class="scenarios">
+      <div class="scn today">
+        <h3><span class="em">🟢</span> Today (as‑is)</h3>
+        <ul>
+          <li><span class="ok">✓</span> Door opens/closes on schedule</li>
+          <li><span class="ok">✓</span> Phone app &amp; remote control</li>
+          <li><span class="ok">✓</span> Battery &amp; status readings</li>
+          <li>Depends on Hentronix's cloud MQTT broker (AWS)</li>
+        </ul>
+      </div>
+      <div class="scn dies">
+        <h3><span class="em">🔴</span> If their server stops</h3>
+        <ul>
+          <li><span class="ok">✓</span> Dawn/dusk still runs (door's own clock)</li>
+          <li><span class="no">✗</span> App &amp; remote control gone</li>
+          <li><span class="no">✗</span> No battery/status, no timer changes</li>
+          <li>The risk we're heading off</li>
+        </ul>
+      </div>
+      <div class="scn fixed">
+        <h3><span class="em">🔵</span> After our fix</h3>
+        <ul>
+          <li><span class="ok">✓</span> Door opens/closes on schedule</li>
+          <li><span class="ok">✓</span> Control &amp; monitoring via Home Assistant</li>
+          <li><span class="ok">✓</span> Fully local — no company, no internet needed</li>
+          <li>Same hardware, nothing rewired</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- INVESTIGATION -->
+  <section class="card">
+    <h2>How it was worked out</h2>
+    <p style="color:var(--muted);margin-top:0">The method used on one unit — all read‑only. The door's traffic was watched; no command was ever sent to it. You can repeat the same steps on your own device.</p>
+    <div class="timeline">
+      <div class="tl">
+        <b>1 · Researched the company &amp; app</b>
+        <span>Hentronix (UK) has wound down; the "Hentronix WiFi" app is a single‑developer app, and the company website is just a marketing page — no cloud of their own under that name.</span>
+      </div>
+      <div class="tl">
+        <b>2 · Got onto the network with the door</b>
+        <span>Reached the home network the opener lives on (a Linux box on the same network is enough as a vantage point for the capture).</span>
+      </div>
+      <div class="tl">
+        <b>3 · Located the door</b>
+        <span>Found the opener's IP on the network. It often sits on a separate "smart‑devices" (IoT) VLAN; a healthy neighbour device confirms that VLAN is reachable.</span>
+      </div>
+      <div class="tl">
+        <b>4 · Found it asleep, with no open ports</b>
+        <span>The door is battery/solar and sleeps to save power. It answered only occasionally and had <b>no open "ports"</b> — so the app doesn't connect <i>to</i> it; the door must reach <i>out</i> to something.</span>
+      </div>
+      <div class="tl">
+        <b>5 · Ruled out a vendor‑named cloud</b>
+        <span>No broker hostnames existed under the vendor's domain. So it talks to a third‑party server, or a fixed address baked into the firmware.</span>
+      </div>
+      <div class="tl">
+        <b>6 · Watched its traffic at the gateway</b>
+        <span>A passive capture caught the door connecting out to a cloud server on <span class="kv">&lt;BROKER_IP&gt; : 1883</span> in plain, unencrypted MQTT, every ~16 seconds — straight to a hardcoded IP, no DNS.</span>
+      </div>
+      <div class="tl found">
+        <b>7 · Read the whole conversation ✓</b>
+        <span class="find">Decoded its login, device ID, and the two channels it uses (one to report status, one to receive commands). No encryption, no secret handshake — exactly what makes a local takeover simple.</span>
+      </div>
+      <div class="tl">
+        <b>8 · The plan</b>
+        <span>Because it talks plainly to a fixed address, one router rule can send it to a broker on your own server instead — no change to the door. That's the plan below.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLAN -->
+  <section class="card">
+    <h2>The plan</h2>
+    <ol class="steps">
+      <li><b>Learn the codes manually from the app (do this first)</b><small>While the vendor cloud is still up, run a passive capture while you work through the real app at the coop: open, close, then change each setting once (open/close times, light, motor firmness). Each press arrives on <code>/hentronix/app/</code> as a command, and the result shows on <code>/hentronix/dev/</code> as state, so one session gives you both. It must happen before the switchover, because once traffic is redirected the app can no longer reach the door.</small></li>
+      <li><b>Stand up the broker + Home Assistant</b><small>On an always‑on server: Home Assistant + the Mosquitto add‑on, static <code>&lt;HA_IP&gt;</code>. Configure Mosquitto to accept the door's captured login (<code>&lt;MQTT_USER&gt;</code> / <code>&lt;MQTT_PASS&gt;</code>) and the <code>/hentronix/#</code> topics, keeping retained messages.</small></li>
+      <li><b>Build the Home Assistant controls</b><small>Sensors from <code>/hentronix/dev/&lt;DEVICE_ID&gt;</code> (battery, door state, uptime), plus an HA <code>cover</code> and settings that publish the captured JSON, retained, to <code>/hentronix/app/&lt;DEVICE_ID&gt;</code>. Only codes seen from the real app, never guesses.</small></li>
+      <li><b>Switch over: add the router redirect (DNAT)</b><small>A destination‑NAT rule: source <code>&lt;DOOR_IP&gt;</code>, destination <code>&lt;BROKER_IP&gt;</code> port <code>1883</code> → <code>&lt;HA_IP&gt;:1883</code>, plus a firewall allow for the door's VLAN → <code>&lt;HA_IP&gt;:1883</code>. If the server sits on the same VLAN as the door, it also needs a masquerade (SNAT) so replies come back through the gateway. The door targets a fixed IP, so this keeps working even after the vendor's server disappears.</small></li>
+      <li><b>Supervised first test, then retire the app</b><small>First open/close through Home Assistant is done deliberately, with someone watching the coop. Dawn/dusk keeps running on the door's own clock throughout, so the hens are never without their schedule during the changeover.</small></li>
+    </ol>
+    <div class="callout good"><b>Captured facts behind the plan (from one unit):</b>
+      <span class="pill">plaintext MQTT 1883</span><span class="pill">no TLS / no pinning</span>
+      <span class="pill">hardcoded IP (no DNS)</span><span class="pill">reconnects ~16s</span>
+      <span class="pill">retained commands</span>
+    </div>
+    <div class="callout warn"><b>Time‑sensitive:</b> step 1 only works while the vendor cloud is still up, because the real app has to send the commands. If the cloud dies first, you lose the clean source of the codes — do that session early.</div>
+  </section>
+
+  <!-- REFERENCE -->
+  <section class="card">
+    <h2>Quick reference</h2>
+    <p style="color:var(--muted);font-size:.9rem;margin:0 2px 6px">Placeholders — fill these from your own device's capture. They aren't published here, by design.</p>
+    <div class="grid">
+      <dl class="facts">
+        <dt>Broker (old)</dt><dd class="kv">&lt;BROKER_IP&gt; : 1883 — plaintext MQTT</dd>
+        <dt>Device / client ID</dt><dd class="kv">&lt;DEVICE_ID&gt; (the device's MAC)</dd>
+        <dt>MQTT login</dt><dd class="kv">user &lt;MQTT_USER&gt; · pass &lt;MQTT_PASS&gt;</dd>
+      </dl>
+      <dl class="facts">
+        <dt>Telemetry topic (device → broker)</dt><dd class="kv">/hentronix/dev/&lt;DEVICE_ID&gt;</dd>
+        <dt>Command topic (broker → device)</dt><dd class="kv">/hentronix/app/&lt;DEVICE_ID&gt; (retained)</dd>
+        <dt>Redirect target (new)</dt><dd class="kv">&lt;HA_IP&gt; : 1883 (your Mosquitto)</dd>
+      </dl>
+    </div>
+    <p style="color:var(--muted);font-size:.84rem;margin:6px 2px 10px">Full write‑up in the <code>docs/</code> folder: how it works, capturing your own device, and the Home Assistant takeover.</p>
+  </section>
+
+  <p class="foot">Method shown on one unit · passive observation only · not affiliated with Hentronix</p>
+</div>
+<script>
+  (function(){
+    var btn=document.getElementById('themeBtn');
+    function cur(){return document.documentElement.getAttribute('data-theme')||
+      (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');}
+    btn.addEventListener('click',function(){
+      var next=cur()==='dark'?'light':'dark';
+      document.documentElement.setAttribute('data-theme',next);
+      try{localStorage.setItem('hx-theme',next)}catch(e){}
+    });
+    try{var s=localStorage.getItem('hx-theme');if(s)document.documentElement.setAttribute('data-theme',s)}catch(e){}
+  })();
+</script>
+</body>
+</html>
