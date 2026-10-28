@@ -100,4 +100,9 @@ What you'll typically find (confirm the exact codes on **your** unit):
 Do this **while the vendor cloud is still up** (the app needs it) and **before** you add the redirect in
 [03](03-home-assistant-takeover.md) — once traffic is redirected, the app can no longer reach the door.
 
+> **Compare your capture against the decoded reference.** [04 — MQTT protocol reference](04-mqtt-protocol.md)
+> lists the topics, command codes, status fields and session model observed on one unit. Use it to check
+> what your own fields mean — but it's a reference to confirm against, not a replacement for capturing
+> your own values, which may differ between units and firmware.
+
 You now have everything to build the local takeover.

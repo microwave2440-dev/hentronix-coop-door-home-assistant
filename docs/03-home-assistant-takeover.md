@@ -9,6 +9,10 @@ and command format from [02](02-find-your-devices-broker.md). Order matters: **l
 from the real app first** (step 0), because once the redirect is in place the vendor app can no longer
 reach the door.
 
+> For the decoded command codes, status fields and session model to **compare your own capture against**,
+> see [04 — MQTT protocol reference](04-mqtt-protocol.md). It's the reference to confirm against; still
+> capture your own values ([02](02-find-your-devices-broker.md)), as they may differ between units.
+
 ## Step 0 — Capture the command format (while the vendor cloud is still up)
 See the end of [02](02-find-your-devices-broker.md). Operate your own door from the real app — open,
 close, each setting once — and record the `/hentronix/app/<DEVICE_ID>` messages. This is your only clean

@@ -35,6 +35,7 @@ working for good — privately, with no dependence on a defunct company's server
 | [docs/01-how-it-works.md](docs/01-how-it-works.md) | The opener's architecture and MQTT control model |
 | [docs/02-find-your-devices-broker.md](docs/02-find-your-devices-broker.md) | How to capture **your own** device's broker IP, login and topics (passively) |
 | [docs/03-home-assistant-takeover.md](docs/03-home-assistant-takeover.md) | The takeover: local broker + DNAT redirect + Home Assistant, step by step |
+| [docs/04-mqtt-protocol.md](docs/04-mqtt-protocol.md) | The decoded MQTT protocol reference: topics, command codes, status fields and the session model |
 | [network-traffic-route.html](network-traffic-route.html) | A one‑page visual of the before/after traffic route (open in a browser) |
 
 ## What is deliberately NOT here
